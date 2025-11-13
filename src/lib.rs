@@ -155,37 +155,7 @@ where
     return fp_vec;
 }
 
-// pub fn walk_dir(vec: HashMap<&PathBuf, i32>, ext: String) -> Vec<FilePlus> {
-//     let dirs = vec;
-//     let mut togeth: Vec<FilePlus> = Vec::new();
-//
-//     for dir in dirs.into_keys() {
-//         //println!("Dir {}", dir.display());
-//         //println!("{}", ext);
-//         //
-//         let files = dir_list_one(
-//             dir.as_os_str().to_owned().into_string().as_ref().unwrap(),
-//             ext.clone(),
-//             false,
-//         );
-//         files.iter().for_each(|f| togeth.push(f.to_owned()));
-//         // should make a check for if a dir has mkv i should run that async i think
-//         // this needs a whole re work/ i need to make the dir_list function smaller, im doing so
-//         // much work on every single iteration blud its ridiculus
-//         // i should use channels
-//
-//         // files.sort();
-//
-//         // for file in files {
-//         //     togeth.push(file);
-//         // }
-//     }
-//     togeth
-// }
-// but wouldnt the check if file has mkv run read_dir again?
-// but instead of listing it out it would be a bool right?
-// or do i hashmap it and make it so if its a mkv then put into hash map
-//
+// i need to make this a crate somewhere else and just use it in my front end / gui
 
 pub fn walk_dir(dirs: HashMap<&PathBuf, i32>, ext: &str) -> Vec<FilePlus> {
     // what if i made it async parrallelism??
