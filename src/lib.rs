@@ -1,6 +1,8 @@
+use itertools::Itertools;
 use rayon::prelude::*;
 use std::fs::read_dir;
 
+use std::time::Instant;
 use std::{collections::HashMap, path::PathBuf};
 
 pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
@@ -11,10 +13,10 @@ pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
-        udo.sort();
+        //udo.sort();
     }
 
-    let this_exention = extention.clone();
+    let this_exention = extention;
     let mut dirs = HashMap::new();
     let mut files = HashMap::new();
     let mut i = 0;
@@ -32,48 +34,91 @@ pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
     });
 
     //let files_clone = files.i.map(|(e, _)| e.to_owned().to_owned());
+    // YEAH THIS BLOCK UNDER ME IS TRASH
+    //
+    //
+    // geting the files into owned
     let mut files_clone: Vec<PathBuf> = files
         .iter()
         .filter_map(|(f, _)| Some(f.to_owned().to_owned()))
         .by_ref()
         .collect();
+    // files_clone = Vec<PathBuf>
+
+    //
+    //let mut files_clone22: Vec<PathBuf> = files.to_owned().to_owned().keys();
+    //
     files_clone.sort();
-    let mut files_extenstion_unique = HashMap::new();
-    let mut suf2: Vec<_> = files
-        .iter()
-        .filter_map(|(f, _)| {
-            let didwa = f
-                .extension()
-                .map(|e| e.to_os_string().into_string().unwrap());
-            let wtbr = match didwa.clone() {
-                Some(t) => t,
-                None => "nada".to_string(),
-            };
-            files_extenstion_unique.insert(wtbr.clone(), 0);
-            didwa
+
+    // let mut files_extenstion_unique: HashMap<PathBuf, i32> = HashMap::new();
+
+    // let mut fuckyou: Vec<_> = files
+    //     .iter()
+    //     .filter_map(|(f, _)| {
+    //         // getting the extension
+    //         let didwa = f
+    //             .extension()
+    //             .map(|e| e.to_os_string().into_string().unwrap());
+    //
+    //         //need this to insert
+    //         let wtbr = match didwa.clone() {
+    //             Some(t) => t,
+    //             None => "nada".to_string(),
+    //         };
+    //         // this whole blok is just putting the extentions in a hashmap to check if their unique
+    //         files_extenstion_unique.insert(wtbr.clone(), 0);
+    //         didwa
+    //     })
+    //     .collect();
+    //
+
+    //let mut value = files_extenstion_unique.clone();
+
+    let unique: HashMap<String, i32> = files
+        .into_keys()
+        .filter_map(|p| {
+            let ext = p.extension()?.to_string_lossy().into_owned();
+            Some((ext, 0)) // key-value pair for collect()
         })
         .collect();
+    // i can put checkdupes/vreating fps into here because im already itering over it
+    //
+    // ORDER OF ITER
+    // so itering to collect key values
+    // then im itering again to create a fileplus vec
+    // then im iterting over the fileplus vec
+    //
+    // what if instead if just iterd over the extenstion and just checked if the extenstionending
+    // with &this_exention and if it is then add that to vec plus
 
-    suf2.sort();
-    let fp = check_dupes_comp(&files_clone);
+    let mut fp: Vec<FilePlus> = Vec::new();
+    {
+        fp = check_dupes_comp(&files_clone);
+    }
 
     let mut all_this: Vec<FilePlus> = Vec::new();
-
-    for full in fp {
-        for s in files_extenstion_unique.clone().into_keys() {
-            if *s == full.extenstion {
-                if full.extenstion.ends_with(&this_exention) {
-                    all_this.push(full.clone());
-                    // so this does work
-                }
-            }
+    //
+    // for full in fp {
+    //     for s in unique.keys() {
+    //         if *s == full.extenstion {
+    //             if full.extenstion.ends_with(&this_exention) {
+    //                 all_this.push(full.clone());
+    //                 // so this does work
+    //             }
+    //         }
+    //     }
+    // }
+    //
+    fp.iter().for_each(|full| {
+        if full.extenstion.ends_with(&this_exention) {
+            all_this.push(full.to_owned());
         }
-    }
+    });
 
     // if dir == false {
-    for this in all_this.clone() {
-        println!("o file {}", this.full_path.display(),);
-    }
+    // for this in all_this.clone() {
+    //     println!("o file {}", this.full_path.display(),);
+    // }
     // } else {
     //     for this in all_this.clone() {
     //         println!("m file {}", this.full_path.display());
@@ -81,38 +126,33 @@ pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
     // }
 
     if !dir {
-        let mut more = walk_dir(dirs.clone(), this_exention.as_str());
+        let more = walk_dir(dirs.clone(), this_exention.as_str());
         //println!("dirs {:?}", dirs.clone());
         let mut ddidy = more;
         ddidy.sort();
-        for m in ddidy {
-            //println!("more");
-            all_this.push(m);
-        }
-    }
+        ddidy.iter().for_each(|f| all_this.push(f.to_owned()));
+        // for m in ddidy {
+        //     //println!("more");
+        //     all_this.push(m);
+        // }
+    };
+
     // for m in more {
     //     println!("m file {},folder {}", m.full_path.display(), m.extenstion);
     // }
 
     all_this
 }
-// what if the walk dir had shared multabillity so i wouldnt need to look over the stuff in diddy
-// again?
-// ok thats a buns idea i should just have one vec where both files give me that the recursion is
-// what would make this fast right? then would apppending to the list wait thats not even what
-// takes long its not the appending to the list after which takes long its the filtering right?
-// use channels to instead add all to a vec then return the vec and again and again each
-// i need to learn rayon fully because that parrlelism is fucking goated
-
 pub fn check_dupes_comp<T: Eq + std::hash::Hash + Clone>(vec: &[T]) -> Vec<FilePlus>
 where
     PathBuf: From<T>,
 {
     let vec = vec;
+    // let start = Instant::now();
 
     let mut fp_vec = Vec::new();
     for file in vec {
-        let path = PathBuf::from(file.to_owned().clone());
+        let path = PathBuf::from(file.to_owned());
         //println!("{}", path.display());
 
         let extention = match path.extension() {
@@ -121,37 +161,14 @@ where
         };
 
         let f = FilePlus {
-            full_path: path.clone(),
+            full_path: path,
             extenstion: extention,
         };
-        // println!(
-        //     "FILES PLUS {} EXTENSTION{:?}",
-        //     f.full_path.display(),
-        //     f.extenstion
-        // );
+
         fp_vec.push(f);
     }
-    //
-    // let mut counts = HashMap::new();
-    // // i need to make a struct which has both the full path and the
-    // // extension
-    // for item in vec {
-    //     *counts.entry(item).or_insert(0) += 1;
-    //     // dude hashmaps must be unique
-    //     // its deadass just insert the entry but if you dont
-    //     // (beacause its already in there) then add 1 to the value
-    // }
-    // let bomba = counts.clone();
-    //
-    // let herediddy = counts
-    //     .into_iter()
-    //     .filter(|(_, count)| *count > 1)
-    //     .map(|(item, _)| item.clone())
-    //     .collect();
-    //
-    // let folders = bomba.into_iter().map(|(item, _)| item.clone()).collect();
-    //
-    // return (herediddy, folders, fp_vec);
+    // this doesnt really check for dupes as much as it just set it to a vec of fileplus
+
     return fp_vec;
 }
 

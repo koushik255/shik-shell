@@ -11,6 +11,8 @@ use gtk4::{
 use gtk4::{ListBox, prelude::*};
 use gtk4_layer_shell::{Layer, LayerShell};
 
+use crate::lib::FilePlus;
+
 fn main() -> glib::ExitCode {
     let app = Application::builder().application_id("photo").build();
 
@@ -55,7 +57,14 @@ fn build_ui(app: &Application) {
 
     //window.present();
 
-    let files = lib::dir_list_one(path, "mkv".to_string(), false);
+    let mut files: Vec<FilePlus> = Vec::new();
+
+    {
+        files = lib::dir_list_one(path, "mkv".to_string(), false);
+    }
+    let duration_til_now = start.elapsed();
+    println!("Duration after dir_list_one {:?}", duration_til_now);
+
     let job_dude = files.clone();
     let s_files: SharedVec<lib::FilePlus> = Rc::new(RefCell::new(job_dude));
 
@@ -87,20 +96,10 @@ fn build_ui(app: &Application) {
         glib::Propagation::Proceed
     });
 
-    //plan
-    //what folder are we running in
-    //have default folder and one you can start from term
-    //:
-    //now just probe to get the metadata image?
-
     if let Some(row) = listbox.row_at_index(0) {
         listbox.select_row(Some(&row));
     }
 
-    //let files2 = files.clone();
-    // let counter = Rc::new(RefCell::new(Picture::default()));
-
-    //let p = counter.clone();
     let sel_files = s_files.clone();
     listbox.connect_row_selected(move |_, row| {
         let mut i = 0;
@@ -128,14 +127,11 @@ fn build_ui(app: &Application) {
     listbox.connect_row_activated(move |_, row| {
         println!("clicked");
         let mut i = 0;
-        // for loop probably only thing slowing it down
+
         for file in &files {
             if i == row.index() {
                 let wdad = file.full_path.display();
-                // let uri = give_me_uis_diddy(file.full_path.as_os_str().to_str().unwrap());
-                //
-                // display_pic.set_filename(Some(uri.as_str()));
-                //
+
                 println!("{}", wdad);
             }
             i = i + 1
