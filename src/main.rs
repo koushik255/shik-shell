@@ -1,17 +1,17 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
 use gtk4::gdk::Key;
-mod lib;
 use gtk4::{
     Application, ApplicationWindow, Box, EventControllerKey, Label, Orientation, Paned, Picture,
     ScrolledWindow, glib,
 };
 use gtk4::{ListBox, prelude::*};
 use gtk4_layer_shell::{Layer, LayerShell};
-
-use crate::lib::FilePlus;
+use rayon::prelude::*;
 
 fn main() -> glib::ExitCode {
     let app = Application::builder().application_id("photo").build();
@@ -50,36 +50,27 @@ fn build_ui(app: &Application) {
     let start = Instant::now();
     println!("Starting timer {:?}", start);
     println!("yeap");
-    let path = "/home/koushikk/Downloads";
-    // need to make sure no .var
-    // i would just need to receive this information via a channel
-    // from a \
-
-    //window.present();
+    let path = "/home/koushikk/Downloads/SHOWS/Friren";
 
     let mut files: Vec<FilePlus> = Vec::new();
 
     {
-        files = lib::dir_list_one(path, "mkv".to_string(), false);
+        files = dir_list_one(path, "mkv".to_string(), false);
     }
     let duration_til_now = start.elapsed();
     println!("Duration after dir_list_one {:?}", duration_til_now);
 
     let job_dude = files.clone();
-    let s_files: SharedVec<lib::FilePlus> = Rc::new(RefCell::new(job_dude));
+    let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(job_dude));
 
-    //let files1 = files.clone();
     let files1 = s_files.clone().borrow().to_owned();
     for file in files1 {
         let mut dd = file.clone();
         let fawda = dd.full_path.as_mut_os_str().to_str().expect("fail unwarp");
         let label = Label::new(Some(fawda));
-        //label.set_margin_start(0);
         label.set_halign(gtk4::Align::Start);
         label.set_width_request(750);
         label.set_margin_end(10);
-        //label.set_margin_top(10);
-        // label.set_margin_bottom(10);
         listbox.append(&label);
     }
 
@@ -109,7 +100,6 @@ fn build_ui(app: &Application) {
         } else {
             println!("nah bruh");
         }
-        // for loop probably only thing slowing it down
         let files2 = sel_files.borrow().to_owned();
 
         for file in &files2 {
@@ -136,29 +126,8 @@ fn build_ui(app: &Application) {
             }
             i = i + 1
         }
-        // if i want it updateing live i would probably need to use channels,
-        // i could just feed each row into the channel and receive it on the main thread so that
-        // the ui would instantly boot up
         println!("Selected row {}", row.index());
     });
-
-    // Optional: Set anchors (remove these to make it freely movable)
-    // window.set_anchor(Edge::Top, true);
-    // window.set_anchor(Edge::Right, true);
-    //
-    // window.set_margin(Edge::Top, 20);
-    // window.set_margin(Edge::Right, 20);
-    // println!("{}", path);
-
-    // let picture = Picture::for_filename(path);
-    //
-    // picture.set_can_shrink(true);
-
-    // let p2 = counter.borrow().to_owned();
-    // right_pane.append(&p2);
-
-    // scrolled.set_child(Some(&listbox));
-    // window.set_child(Some(&scrolled));
 
     let duration = start.elapsed();
     println!("Done it took {:?}", duration);
@@ -196,4 +165,114 @@ fn give_me_uis_diddy(path: &str) -> String {
     println!("{}", &path);
 
     path
+}
+
+use std::fs::read_dir;
+
+pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
+    let mut udo: Vec<PathBuf> = Vec::new();
+    if let Some(entieti) = read_dir(path).ok() {
+        udo = entieti
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+    }
+
+    let this_exention = extention;
+    let mut dirs = HashMap::new();
+    let mut files = HashMap::new();
+    let mut i = 0;
+    let mut ifile = 0;
+
+    udo.iter().for_each(|f| {
+        if f.is_dir() {
+            dirs.insert(f, i);
+
+            i += 1;
+        } else {
+            files.insert(f, ifile);
+            ifile += 1;
+        }
+    });
+
+    let mut files_clone: Vec<PathBuf> = files
+        .iter()
+        .filter_map(|(f, _)| Some(f.to_owned().to_owned()))
+        .by_ref()
+        .collect();
+
+    files_clone.sort();
+
+    let unique: HashMap<String, i32> = files
+        .into_keys()
+        .filter_map(|p| {
+            let ext = p.extension()?.to_string_lossy().into_owned();
+
+            Some((ext, 0))
+        })
+        .collect();
+
+    let mut fp: Vec<FilePlus> = Vec::new();
+    {
+        fp = check_dupes_comp(&files_clone);
+    }
+
+    let mut all_this: Vec<FilePlus> = Vec::new();
+
+    fp.iter().for_each(|full| {
+        if full.extenstion.ends_with(&this_exention) {
+            all_this.push(full.to_owned());
+        }
+    });
+
+    if !dir {
+        let more = walk_dir(dirs.clone(), this_exention.as_str());
+        let mut ddidy = more;
+        ddidy.sort();
+        ddidy.iter().for_each(|f| all_this.push(f.to_owned()));
+    };
+
+    all_this
+}
+pub fn check_dupes_comp<T: Eq + std::hash::Hash + Clone>(vec: &[T]) -> Vec<FilePlus>
+where
+    PathBuf: From<T>,
+{
+    let vec = vec;
+
+    let mut fp_vec = Vec::new();
+    for file in vec {
+        let path = PathBuf::from(file.to_owned());
+
+        let extention = match path.extension() {
+            Some(e) => e.to_string_lossy().into_owned(),
+            None => "DONOT".to_string(),
+        };
+
+        let f = FilePlus {
+            full_path: path,
+            extenstion: extention,
+        };
+
+        fp_vec.push(f);
+    }
+
+    return fp_vec;
+}
+
+pub fn walk_dir(dirs: HashMap<&PathBuf, i32>, ext: &str) -> Vec<FilePlus> {
+    dirs.keys()
+        .par_bridge()
+        .flat_map(|dir| {
+            dir.to_str()
+                .map(|path_str| dir_list_one(path_str, ext.to_string(), false))
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FilePlus {
+    pub full_path: PathBuf,
+    pub extenstion: String,
 }
