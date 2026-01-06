@@ -8,9 +8,9 @@ use clap::Parser;
 use gtk4::gdk::Key;
 use gtk4::{
     Application, ApplicationWindow, Box, CssProvider, EventControllerKey, Label, Orientation,
-    Picture, ScrolledWindow, glib,
+    Picture, ScrolledWindow,
 };
-use gtk4::{ListBox, gdk, prelude::*};
+use gtk4::{ListBox, gdk, glib, prelude::*};
 use gtk4_layer_shell::{Layer, LayerShell};
 use rayon::prelude::*;
 
@@ -274,13 +274,34 @@ fn build_ui(app: &Application, path: &str) {
 }
 
 fn give_me_uis_diddy(path: &str) -> String {
-    let uri = format!("file://{}", std::fs::canonicalize(path).unwrap().display());
-    let hash = format!("{:x}", md5::compute(uri));
+    // Use GLib's proper URI encoding to handle special characters
+    let canonical_path = std::fs::canonicalize(path).unwrap();
+    let uri = glib::filename_to_uri(&canonical_path, None).unwrap();
+    let hash = glib::compute_checksum_for_string(glib::ChecksumType::Md5, &uri)
+        .unwrap_or_else(|| String::from("00000000000000000000000000000000").into());
 
-    format!(
+    let check_this = format!(
         "{}/.cache/thumbnails/normal/{hash}.png",
         std::env::var("HOME").unwrap()
-    )
+    );
+    // i should make this a function tbh
+    let final_thumbnail = if check_file(check_this.clone()) {
+        check_this
+    } else {
+        let check_twice = format!(
+            "{}/.cache/thumbnails/large/{hash}.png",
+            std::env::var("HOME").unwrap()
+        );
+
+        if check_file(check_twice.clone()) {
+            check_twice
+        } else {
+            eprintln!("WARNING: No thumbnail found for: {}", path);
+            check_this
+        }
+    };
+
+    final_thumbnail
 }
 
 use std::fs::read_dir;
@@ -383,23 +404,13 @@ pub fn walk_dir(dirs: HashMap<&PathBuf, i32>, ext: &str) -> Vec<FilePlus> {
         })
         .collect()
 }
-pub fn check_file(file: String) {
+pub fn check_file(file: String) -> bool {
     let file_as_path_buf = PathBuf::from(file);
 
     if file_as_path_buf.exists() {
-        eprintln!(
-            "
-                DEBUG:PHOTO FILE EXISTS {}
-            ",
-            file_as_path_buf.display()
-        )
+        return true;
     } else {
-        eprintln!(
-            "
-                DEBUG:PHOTO DOES NOT EXIST {}
-            ",
-            file_as_path_buf.display()
-        )
+        return false;
     }
 }
 
