@@ -1,76 +1,194 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Instant;
 
+use clap::Parser;
 use gtk4::gdk::Key;
 use gtk4::{
-    Application, ApplicationWindow, Box, EventControllerKey, Label, Orientation, Paned, Picture,
-    ScrolledWindow, glib,
+    Application, ApplicationWindow, Box, CssProvider, EventControllerKey, Label, Orientation,
+    Picture, ScrolledWindow, glib,
 };
-use gtk4::{ListBox, prelude::*};
+use gtk4::{ListBox, gdk, prelude::*};
 use gtk4_layer_shell::{Layer, LayerShell};
 use rayon::prelude::*;
 
-fn main() -> glib::ExitCode {
-    let app = Application::builder().application_id("photo").build();
+const CSS: &str = r#"
+window.main-window {
+    background-color: rgba(30, 30, 30, 0.92);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
 
-    app.connect_activate(build_ui);
-    app.run()
+window {
+    background-color: rgba(30, 30, 30, 0.92);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+listbox {
+    background-color: transparent;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+listbox row {
+    background-color: rgba(20, 20, 20, 0.95);
+    border-radius: 8px;
+    margin: 4px 0;
+    padding: 12px 16px;
+    transition: background-color 200ms ease, transform 200ms ease;
+}
+
+listbox row:hover {
+    background-color: rgba(35, 35, 35, 0.95);
+    transform: translateX(4px);
+}
+
+listbox row:selected {
+    background-color: rgba(100, 149, 237, 0.6);
+    box-shadow: 0 0 0 2px rgba(100, 149, 237, 0.7);
+}
+
+listbox row label {
+    color: #4a4a4a;
+    font-size: 14px;
+}
+
+label.file-label {
+    color: #3a3a3a;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+scrolledwindow {
+    background-color: transparent;
+    border-radius: 12px;
+}
+
+scrolledwindow > scrollbar {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+scrolledwindow > scrollbar slider {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    min-width: 8px;
+    min-height: 8px;
+}
+
+scrolledwindow > scrollbar slider:hover {
+    background-color: rgba(255, 255, 255, 0.35);
+}
+
+picture {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+picture.preview-image {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+box {
+    background-color: transparent;
+}
+"#;
+
+fn load_css() {
+    let provider = CssProvider::new();
+    provider.load_from_string(CSS);
+    gtk4::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("Could not connect to a display"),
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+}
+
+#[derive(Parser)]
+struct Cli {
+    folder_path: String,
+}
+
+fn main() -> glib::ExitCode {
+    let cli = Cli::parse();
+
+    let folder_path = cli.folder_path;
+
+    let app = Application::builder()
+        .application_id("com.example.gtkshell")
+        .build();
+
+    app.connect_activate(move |app| build_ui(app, &folder_path));
+    app.run_with_args(&[] as &[&str])
 }
 
 type SharedVec<T> = Rc<RefCell<Vec<T>>>;
 
-fn build_ui(app: &Application) {
+fn build_ui(app: &Application, path: &str) {
+    load_css();
+
     let window = ApplicationWindow::builder()
         .application(app)
-        .default_width(800)
+        .default_width(1400)
         .default_height(800)
         .build();
 
     window.init_layer_shell();
     window.set_layer(Layer::Overlay);
     window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::Exclusive);
+    window.add_css_class("main-window");
 
     let scrolled = ScrolledWindow::builder()
         .hscrollbar_policy(gtk4::PolicyType::Automatic)
         .vscrollbar_policy(gtk4::PolicyType::Automatic)
         .build();
+    scrolled.set_margin_start(12);
+    scrolled.set_margin_end(12);
+    scrolled.set_margin_top(12);
+    scrolled.set_margin_bottom(12);
+
     let listbox = ListBox::new();
-
     listbox.add_css_class("boxed-list");
+    listbox.add_css_class("rich-list");
 
-    let right_pane = Box::new(Orientation::Vertical, 6);
-    right_pane.set_margin_top(12);
+    let right_pane = Box::new(Orientation::Vertical, 12);
+    right_pane.set_margin_start(12);
     right_pane.set_margin_end(12);
+    right_pane.set_margin_top(12);
+    right_pane.set_margin_bottom(12);
+    right_pane.add_css_class("preview-pane");
+
     let display_pic = Picture::new();
+    display_pic.add_css_class("preview-image");
     right_pane.append(&display_pic);
 
-    let start = Instant::now();
-    println!("Starting timer {:?}", start);
-    println!("yeap");
-    let path = "/home/koushikk/Downloads/SHOWS/Friren";
-
-    let mut files: Vec<FilePlus> = Vec::new();
-
-    {
-        files = dir_list_one(path, "mkv".to_string(), false);
-    }
-    let duration_til_now = start.elapsed();
-    println!("Duration after dir_list_one {:?}", duration_til_now);
+    let files = dir_list_one(path, "mkv".to_string(), false);
 
     let job_dude = files.clone();
     let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(job_dude));
 
     let files1 = s_files.clone().borrow().to_owned();
     for file in files1 {
-        let mut dd = file.clone();
-        let fawda = dd.full_path.as_mut_os_str().to_str().expect("fail unwarp");
-        let label = Label::new(Some(fawda));
+        let filename = file
+            .full_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_else(|| file.full_path.to_str().unwrap_or(""));
+        let label = Label::new(Some(filename));
         label.set_halign(gtk4::Align::Start);
-        label.set_width_request(750);
+        label.set_width_request(700);
         label.set_margin_end(10);
+        label.add_css_class("file-label");
         listbox.append(&label);
     }
 
@@ -79,7 +197,6 @@ fn build_ui(app: &Application) {
 
     let window2 = window.clone();
     key_ctl.connect_key_pressed(move |_, key, _code, _modifier| {
-        println!("pressed : {key:?}");
         if key == Key::Escape {
             window2.clone().close();
             return glib::Propagation::Stop;
@@ -97,46 +214,48 @@ fn build_ui(app: &Application) {
         let mut row = row;
         if row.is_some() {
             row = Some(row.unwrap());
-        } else {
-            println!("nah bruh");
         }
         let files2 = sel_files.borrow().to_owned();
 
         for file in &files2 {
             if i == row.expect("FUCK").index() {
-                let wdad = file.full_path.display();
                 let uri = give_me_uis_diddy(file.full_path.as_os_str().to_str().unwrap());
 
                 display_pic.set_filename(Some(uri.as_str()));
-
-                println!("{}", wdad);
+                // eprintln!("DEBUG: PICTURE {:?}", uri);
+                // should check if the path exists
+                check_file(uri);
             }
             i = i + 1
         }
     });
     listbox.connect_row_activated(move |_, row| {
-        println!("clicked");
+        eprintln!("DEBUG: Row activated at index {}", row.index());
         let mut i = 0;
 
         for file in &files {
             if i == row.index() {
-                let wdad = file.full_path.display();
-
-                println!("{}", wdad);
+                println!("{}", file.full_path.display());
+                eprintln!(
+                    "DEBUG: Printed path to stdout: {}",
+                    file.full_path.display()
+                );
+                io::stdout().flush().expect("Failed to flush stdout");
+                eprintln!("DEBUG: Stdout flushed successfully");
             }
             i = i + 1
         }
-        println!("Selected row {}", row.index());
     });
-
-    let duration = start.elapsed();
-    println!("Done it took {:?}", duration);
 
     scrolled.set_child(Some(&listbox));
 
-    let hbox = Box::new(Orientation::Horizontal, 0);
+    let hbox = Box::new(Orientation::Horizontal, 12);
     hbox.set_hexpand(true);
     hbox.set_vexpand(true);
+    hbox.set_margin_start(16);
+    hbox.set_margin_end(16);
+    hbox.set_margin_top(16);
+    hbox.set_margin_bottom(16);
 
     scrolled.set_hexpand(true);
     scrolled.set_halign(gtk4::Align::Fill);
@@ -158,13 +277,10 @@ fn give_me_uis_diddy(path: &str) -> String {
     let uri = format!("file://{}", std::fs::canonicalize(path).unwrap().display());
     let hash = format!("{:x}", md5::compute(uri));
 
-    let path = format!(
+    format!(
         "{}/.cache/thumbnails/normal/{hash}.png",
         std::env::var("HOME").unwrap()
-    );
-    println!("{}", &path);
-
-    path
+    )
 }
 
 use std::fs::read_dir;
@@ -203,7 +319,7 @@ pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
 
     files_clone.sort();
 
-    let unique: HashMap<String, i32> = files
+    let _unique: HashMap<String, i32> = files
         .into_keys()
         .filter_map(|p| {
             let ext = p.extension()?.to_string_lossy().into_owned();
@@ -212,10 +328,7 @@ pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
         })
         .collect();
 
-    let mut fp: Vec<FilePlus> = Vec::new();
-    {
-        fp = check_dupes_comp(&files_clone);
-    }
+    let fp = check_dupes_comp(&files_clone);
 
     let mut all_this: Vec<FilePlus> = Vec::new();
 
@@ -269,6 +382,25 @@ pub fn walk_dir(dirs: HashMap<&PathBuf, i32>, ext: &str) -> Vec<FilePlus> {
                 .unwrap_or_default()
         })
         .collect()
+}
+pub fn check_file(file: String) {
+    let file_as_path_buf = PathBuf::from(file);
+
+    if file_as_path_buf.exists() {
+        eprintln!(
+            "
+                DEBUG:PHOTO FILE EXISTS {}
+            ",
+            file_as_path_buf.display()
+        )
+    } else {
+        eprintln!(
+            "
+                DEBUG:PHOTO DOES NOT EXIST {}
+            ",
+            file_as_path_buf.display()
+        )
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

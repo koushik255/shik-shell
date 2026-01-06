@@ -3,10 +3,14 @@ name = "gtkshell"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "kousgrep"
+path = "src/main.rs"
+
 [dependencies]
 gtk4 = { version = "0.10.2", features = ["v4_6", "v4_12", "gio_v2_80"] }
 gtk4-layer-shell = "0.7.0"
 itertools = "0.14.0"
 md5 = "0.8.0"
 rayon = "1.11.0"
-
+clap = { version = "4.5", features = ["derive"] }
