@@ -13,3 +13,7 @@ cargo install --path
 
  --TODO---
  if its a png allow it to show aswell also let it just load everything tbh
+
+
+// run in target to replace one in cargo path
+ mv kousgrep /home/koushikk/.cargo/bin

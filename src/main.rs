@@ -116,13 +116,14 @@ fn load_css() {
 
 #[derive(Parser)]
 struct Cli {
-    folder_path: String,
+    #[arg(default_value = ".")]
+    folder_path: Option<String>,
 }
 
 fn main() -> glib::ExitCode {
     let cli = Cli::parse();
 
-    let folder_path = cli.folder_path;
+    let folder_path = cli.folder_path.expect("error option");
 
     let app = Application::builder()
         .application_id("com.example.gtkshell")
@@ -176,7 +177,18 @@ fn build_ui(app: &Application, path: &str) {
     //let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(None.unwrap()));
 
     // make this function or sometihng
-    let files = dir_list_one(path, "mkv".to_string(), false);
+    // what this would open would depend on the command flag opening
+    // you would have recursive open, open passive, and open default (Downloads)/userset
+    //
+    let mut files: Vec<FilePlus> = Vec::new();
+    //let files = dir_list_one(path, "mkv".to_string(), false);
+    // so either set that as it or if no flag is passed have it do orther
+    if path == "." {
+        let current_dir = std::env::current_dir().unwrap();
+        files = list_self_dir(current_dir.to_str().unwrap());
+    } else {
+        files = dir_list_one(path, "mkv".to_string(), false);
+    }
 
     let job_dude = files.clone();
     let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(job_dude));
