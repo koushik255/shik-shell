@@ -171,17 +171,25 @@ fn build_ui(app: &Application, path: &str) {
     let display_pic = Picture::new();
     display_pic.add_css_class("preview-image");
     right_pane.append(&display_pic);
+    // empty state holder
+    // how to init as nothing?
+    //let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(None.unwrap()));
 
+    // make this function or sometihng
     let files = dir_list_one(path, "mkv".to_string(), false);
 
     let job_dude = files.clone();
     let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(job_dude));
+    // job_dude
+    //     .into_iter()
+    //     .for_each(|e| s_files.borrow_mut().push(e));
 
     let files1 = s_files.clone().borrow().to_owned();
     for file in files1 {
         file.add_to_listbox(&listbox);
     }
 
+    //
     let key_ctl = EventControllerKey::new();
     window.add_controller(key_ctl.clone());
 
@@ -194,15 +202,13 @@ fn build_ui(app: &Application, path: &str) {
             return glib::Propagation::Stop;
         }
         if key == Key::S {
-            let replace_file = list_self_dir("/home/koushikk/Downloads");
-            let yepyep = replace_file.clone();
-            yepyep
-                .into_iter()
-                .for_each(|e| s_files_remove_all.borrow_mut().push(e));
-            let files1 = s_files_remove_all.clone().borrow().to_owned();
-            for file in files1 {
-                file.add_to_listbox(&listbox_remove);
-            }
+            // let replace_file = list_self_dir("/home/koushikk/Downloads");
+            // all i would need to do now is just make it so that the current directory im in is
+            // this file path
+            let current_dir = std::env::current_dir().unwrap();
+            let replace_file = list_self_dir(current_dir.to_str().unwrap());
+            println!("Using trait");
+            replace_file.append_to_screen(&listbox_remove, s_files_remove_all.clone());
         }
         if key == Key::D {
             listbox_remove.remove_all();
@@ -328,7 +334,7 @@ pub fn list_self_dir(path: &str) -> Vec<FilePlus> {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
     }
-    let mut total_tal: Vec<FilePlus> = Vec::new();
+    //let mut total_tal: Vec<FilePlus> = Vec::new();
 
     udo.sort();
     let fp = check_dupes_comp(&udo);
@@ -485,5 +491,21 @@ impl FilePlus {
         label.set_margin_end(10);
         label.add_css_class("file-label");
         listbox.append(&label);
+    }
+}
+
+trait FilePlusVecExt {
+    fn append_to_screen(&self, listbox: &ListBox, storage: SharedVec<FilePlus>);
+}
+
+impl FilePlusVecExt for Vec<FilePlus> {
+    fn append_to_screen(&self, listbox: &ListBox, storage: SharedVec<FilePlus>) {
+        let job_dude = self.clone();
+        // since were just appened to the Sharedvec?
+        job_dude
+            .into_iter()
+            .for_each(|e| storage.borrow_mut().push(e));
+        let files1 = storage.borrow().to_owned();
+        files1.into_iter().for_each(|f| f.add_to_listbox(listbox));
     }
 }
