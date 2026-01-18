@@ -179,27 +179,35 @@ fn build_ui(app: &Application, path: &str) {
 
     let files1 = s_files.clone().borrow().to_owned();
     for file in files1 {
-        let filename = file
-            .full_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_else(|| file.full_path.to_str().unwrap_or(""));
-        let label = Label::new(Some(filename));
-        label.set_halign(gtk4::Align::Start);
-        label.set_width_request(700);
-        label.set_margin_end(10);
-        label.add_css_class("file-label");
-        listbox.append(&label);
+        file.add_to_listbox(&listbox);
     }
 
     let key_ctl = EventControllerKey::new();
     window.add_controller(key_ctl.clone());
 
     let window2 = window.clone();
+    let listbox_remove = listbox.clone();
+    let s_files_remove_all = s_files.clone();
     key_ctl.connect_key_pressed(move |_, key, _code, _modifier| {
         if key == Key::Escape {
             window2.clone().close();
             return glib::Propagation::Stop;
+        }
+        if key == Key::S {
+            let replace_file = list_self_dir("/home/koushikk/Downloads");
+            let yepyep = replace_file.clone();
+            yepyep
+                .into_iter()
+                .for_each(|e| s_files_remove_all.borrow_mut().push(e));
+            let files1 = s_files_remove_all.clone().borrow().to_owned();
+            for file in files1 {
+                file.add_to_listbox(&listbox_remove);
+            }
+        }
+        if key == Key::D {
+            listbox_remove.remove_all();
+            s_files_remove_all.borrow_mut().clear();
+            println!("Removed all Listbox elements!");
         }
         glib::Propagation::Proceed
     });
@@ -210,15 +218,15 @@ fn build_ui(app: &Application, path: &str) {
 
     let sel_files = s_files.clone();
     listbox.connect_row_selected(move |_, row| {
+        let Some(row) = row else {
+            return;
+        };
+
         let mut i = 0;
-        let mut row = row;
-        if row.is_some() {
-            row = Some(row.unwrap());
-        }
         let files2 = sel_files.borrow().to_owned();
 
         for file in &files2 {
-            if i == row.expect("FUCK").index() {
+            if i == row.index() {
                 let uri = give_me_uis_diddy(file.full_path.as_os_str().to_str().unwrap());
 
                 display_pic.set_filename(Some(uri.as_str()));
@@ -229,9 +237,12 @@ fn build_ui(app: &Application, path: &str) {
             i = i + 1
         }
     });
+    let remove_singular_row = listbox.clone();
+    let s_files_remove = s_files.clone();
     listbox.connect_row_activated(move |_, row| {
         eprintln!("DEBUG: Row activated at index {}", row.index());
         let mut i = 0;
+        let row_index = row.index();
 
         for file in &files {
             if i == row.index() {
@@ -245,6 +256,9 @@ fn build_ui(app: &Application, path: &str) {
             }
             i = i + 1
         }
+        s_files_remove.borrow_mut().remove(row_index as usize);
+        // s_files_remove.borrow_mut().clear();
+        remove_singular_row.remove(row);
     });
 
     scrolled.set_child(Some(&listbox));
@@ -306,6 +320,40 @@ fn give_me_uis_diddy(path: &str) -> String {
 
 use std::fs::read_dir;
 
+pub fn list_self_dir(path: &str) -> Vec<FilePlus> {
+    let mut udo: Vec<PathBuf> = Vec::new();
+    if let Some(wtvr) = read_dir(path).ok() {
+        udo = wtvr
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+    }
+    let mut total_tal: Vec<FilePlus> = Vec::new();
+
+    udo.sort();
+    let fp = check_dupes_comp(&udo);
+    //since i just want everything from it i gueses its fine to
+    // leave like this?
+
+    // for p in udo {
+    //     let mut dirs: Vec<PathBuf> = Vec::new();
+    //     let mut files: Vec<PathBuf> = Vec::new();
+    //     if p.is_dir() {
+    //         dirs.push(p);
+    //     } else {
+    //         files.push(p);
+    //     }
+
+    //     for f in files {
+    //         println!("files from self {}", f.display());
+    //     }
+    //     for d in dirs {
+    //         println!("dir from self {}", d.display());
+    //     }
+    // }
+    fp
+}
+
 pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
     let mut udo: Vec<PathBuf> = Vec::new();
     if let Some(entieti) = read_dir(path).ok() {
@@ -353,8 +401,12 @@ pub fn dir_list_one(path: &str, extention: String, dir: bool) -> Vec<FilePlus> {
 
     let mut all_this: Vec<FilePlus> = Vec::new();
 
+    // i could make the "exntension" an Enum so it just has like "folder" or "images"
+    // "Videos+images" thats comp
+
+    let png = "png".to_string();
     fp.iter().for_each(|full| {
-        if full.extenstion.ends_with(&this_exention) {
+        if full.extenstion.ends_with(&this_exention) || full.extenstion.ends_with(&png) {
             all_this.push(full.to_owned());
         }
     });
@@ -418,4 +470,20 @@ pub fn check_file(file: String) -> bool {
 pub struct FilePlus {
     pub full_path: PathBuf,
     pub extenstion: String,
+}
+
+impl FilePlus {
+    fn add_to_listbox(&self, listbox: &ListBox) {
+        let filename = self
+            .full_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_else(|| self.full_path.to_str().unwrap_or(""));
+        let label = Label::new(Some(filename));
+        label.set_halign(gtk4::Align::Start);
+        label.set_width_request(700);
+        label.set_margin_end(10);
+        label.add_css_class("file-label");
+        listbox.append(&label);
+    }
 }

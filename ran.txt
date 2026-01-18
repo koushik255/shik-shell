@@ -1,2 +1,15 @@
 d83a32b19dc350a145e0aa0eb8f80199.png
 is thumbnail cache in large for episode 7 offseason
+cargo install --path
+
+-- it needs to be able to view images and it should just list every thing first
+-- work on this when get home later 
+ the textbook reader idea i lowk fuck with that really heavy
+
+ god ffmpeg is awesome lowk i should try to see how that works with
+ the C code tbh
+ acuallty maybe its not for me tho, i dont like C code that much 
+ maybe i should just use it.
+
+ --TODO---
+ if its a png allow it to show aswell also let it just load everything tbh
