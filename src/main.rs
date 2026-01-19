@@ -140,7 +140,7 @@ fn build_ui(app: &Application, path: &str) {
 
     let window = ApplicationWindow::builder()
         .application(app)
-        .default_width(1400)
+        .default_width(1200)
         .default_height(800)
         .build();
 
@@ -192,6 +192,7 @@ fn build_ui(app: &Application, path: &str) {
 
     let job_dude = files.clone();
     let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(job_dude));
+    let path_control = Rc::new(RefCell::new(PathBuf::new()));
     // job_dude
     //     .into_iter()
     //     .for_each(|e| s_files.borrow_mut().push(e));
@@ -208,6 +209,7 @@ fn build_ui(app: &Application, path: &str) {
     let window2 = window.clone();
     let listbox_remove = listbox.clone();
     let s_files_remove_all = s_files.clone();
+    let glob_path_cl = path_control.clone();
     key_ctl.connect_key_pressed(move |_, key, _code, _modifier| {
         if key == Key::Escape {
             window2.clone().close();
@@ -216,8 +218,27 @@ fn build_ui(app: &Application, path: &str) {
         if key == Key::S {
             // let replace_file = list_self_dir("/home/koushikk/Downloads");
             // all i would need to do now is just make it so that the current directory im in is
-            // this file path
-            let current_dir = std::env::current_dir().unwrap();
+            // this file patha
+            let mut path_set = false;
+            if glob_path_cl.clone().borrow().exists() {
+                listbox_remove.remove_all();
+                s_files_remove_all.borrow_mut().clear();
+                println!("Removed all Listbox elements!");
+
+                println!(
+                    "this exist fake past test btw {}",
+                    glob_path_cl.clone().borrow().display()
+                );
+                path_set = true;
+            } else {
+                println!("nope fucking you path KEY:S");
+            }
+            let mut current_dir = PathBuf::new();
+            if path_set {
+                current_dir = glob_path_cl.clone().borrow().to_path_buf();
+            } else {
+                current_dir = std::env::current_dir().unwrap();
+            }
             let replace_file = list_self_dir(current_dir.to_str().unwrap());
             println!("Using trait");
             replace_file.append_to_screen(&listbox_remove, s_files_remove_all.clone());
@@ -226,6 +247,12 @@ fn build_ui(app: &Application, path: &str) {
             listbox_remove.remove_all();
             s_files_remove_all.borrow_mut().clear();
             println!("Removed all Listbox elements!");
+        }
+        if key == Key::P {
+            println!(
+                "GLOBAL PATH FROM INPUT CLOSURE {}",
+                glob_path_cl.clone().borrow().display()
+            );
         }
         glib::Propagation::Proceed
     });
@@ -257,14 +284,24 @@ fn build_ui(app: &Application, path: &str) {
     });
     let remove_singular_row = listbox.clone();
     let s_files_remove = s_files.clone();
+    let path_univ = path_control.clone();
     listbox.connect_row_activated(move |_, row| {
         eprintln!("DEBUG: Row activated at index {}", row.index());
         let mut i = 0;
         let row_index = row.index();
+        let mut file_path_dir_true = ".";
 
         for file in &files {
             if i == row.index() {
                 println!("{}", file.full_path.display());
+                if file.full_path.is_dir() {
+                    println!("THIS IS A DIR");
+                    file_path_dir_true = file.full_path.to_str().expect("Error row activate");
+                    *path_univ.borrow_mut() = file.full_path.clone();
+                } else {
+                    println!("not a dir");
+                }
+
                 eprintln!(
                     "DEBUG: Printed path to stdout: {}",
                     file.full_path.display()
@@ -274,9 +311,15 @@ fn build_ui(app: &Application, path: &str) {
             }
             i = i + 1
         }
-        s_files_remove.borrow_mut().remove(row_index as usize);
-        // s_files_remove.borrow_mut().clear();
-        remove_singular_row.remove(row);
+
+        //s_files_remove.borrow_mut().remove(row_index as usize);
+        s_files_remove.borrow_mut().clear();
+        remove_singular_row.remove_all();
+        // works
+        //
+
+        let replace_file = list_self_dir(file_path_dir_true);
+        replace_file.append_to_screen(&remove_singular_row, s_files_remove.clone());
     });
 
     scrolled.set_child(Some(&listbox));
