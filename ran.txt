@@ -5,10 +5,18 @@ cargo install --path
  --TODO---
 #DONE if its a png allow it to show aswell also let it just load everything tbh
 I want the pictures to be better quality because they are so dusty, i wonder how fast gstreamer thumbnaisl are
+--##DONEi want it to indicate where its a dir or not
+--i want it so that you can turn on like showing the dircs /showing the files, i should proabbly
+recreate the way things are shows on the screen, the struct would need to hold file properties aswell 
+
 
 wq
+---ISSUES
+//#DONEIndexs dont update, so when you clear the screen i didnt clear the index so they didnt match up somewhere 
 
 
+
+// if i use the command for a dir the default should be as if you opened it in that directory
 
 
 // run in target to replace one in cargo path

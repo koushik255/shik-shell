@@ -185,6 +185,7 @@ fn build_ui(app: &Application, path: &str) {
     // so either set that as it or if no flag is passed have it do orther
     if path == "." {
         let current_dir = std::env::current_dir().unwrap();
+        println!("{}", current_dir.display());
         files = list_self_dir(current_dir.to_str().unwrap());
     } else {
         files = dir_list_one(path, "mkv".to_string(), false);
@@ -244,8 +245,9 @@ fn build_ui(app: &Application, path: &str) {
             replace_file.append_to_screen(&listbox_remove, s_files_remove_all.clone());
         }
         if key == Key::D {
-            listbox_remove.remove_all();
             s_files_remove_all.borrow_mut().clear();
+            listbox_remove.remove_all();
+            //s_files_remove_all.borrow_mut().clear();
             println!("Removed all Listbox elements!");
         }
         if key == Key::P {
@@ -253,6 +255,14 @@ fn build_ui(app: &Application, path: &str) {
                 "GLOBAL PATH FROM INPUT CLOSURE {}",
                 glob_path_cl.clone().borrow().display()
             );
+        }
+        if key == Key::R {
+            println!("only dirs will be shown");
+            s_files_remove_all.borrow_mut().clear();
+            listbox_remove.remove_all();
+            let replace_file = list_self_dir(glob_path_cl.clone().borrow().to_str().unwrap());
+            // i would only want src to be appnede but lets see
+            replace_file.append_to_screen_selective(&listbox_remove, s_files_remove_all.clone());
         }
         glib::Propagation::Proceed
     });
@@ -285,21 +295,24 @@ fn build_ui(app: &Application, path: &str) {
     let remove_singular_row = listbox.clone();
     let s_files_remove = s_files.clone();
     let path_univ = path_control.clone();
+    // clones are like this because of the gtkshell thing not because of Rust language semantics
     listbox.connect_row_activated(move |_, row| {
         eprintln!("DEBUG: Row activated at index {}", row.index());
         let mut i = 0;
         let row_index = row.index();
         let mut file_path_dir_true = ".";
 
-        for file in &files {
+        let files_for_loop = s_files_remove.borrow().to_owned();
+        for file in &files_for_loop {
             if i == row.index() {
                 println!("{}", file.full_path.display());
                 if file.full_path.is_dir() {
                     println!("THIS IS A DIR");
                     file_path_dir_true = file.full_path.to_str().expect("Error row activate");
                     *path_univ.borrow_mut() = file.full_path.clone();
+                    // do i need to clean them here?
                 } else {
-                    println!("not a dir");
+                    println!("not a dir {}", path_univ.clone().borrow().display());
                 }
 
                 eprintln!(
@@ -316,8 +329,11 @@ fn build_ui(app: &Application, path: &str) {
         s_files_remove.borrow_mut().clear();
         remove_singular_row.remove_all();
         // works
-        //
-
+        //still leavig first indicies
+        println!(
+            "Path which is replacing the ccurrent {}",
+            file_path_dir_true
+        );
         let replace_file = list_self_dir(file_path_dir_true);
         replace_file.append_to_screen(&remove_singular_row, s_files_remove.clone());
     });
@@ -540,7 +556,14 @@ impl FilePlus {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or_else(|| self.full_path.to_str().unwrap_or(""));
-        let label = Label::new(Some(filename));
+
+        let mut label = Label::new(Some(filename));
+        if self.full_path.is_dir() {
+            let heredude = filename.to_string() + "*diremoji";
+            println!("Adding directory {}", heredude);
+            label = Label::new(Some(heredude.as_str()));
+        }
+
         label.set_halign(gtk4::Align::Start);
         label.set_width_request(700);
         label.set_margin_end(10);
@@ -551,6 +574,7 @@ impl FilePlus {
 
 trait FilePlusVecExt {
     fn append_to_screen(&self, listbox: &ListBox, storage: SharedVec<FilePlus>);
+    fn append_to_screen_selective(&self, listbox: &ListBox, storage: SharedVec<FilePlus>);
 }
 
 impl FilePlusVecExt for Vec<FilePlus> {
@@ -562,5 +586,24 @@ impl FilePlusVecExt for Vec<FilePlus> {
             .for_each(|e| storage.borrow_mut().push(e));
         let files1 = storage.borrow().to_owned();
         files1.into_iter().for_each(|f| f.add_to_listbox(listbox));
+    }
+
+    fn append_to_screen_selective(&self, listbox: &ListBox, storage: SharedVec<FilePlus>) {
+        let job_dude = self.clone();
+        // since were just appened to the Sharedvec?
+
+        job_dude.into_iter().for_each(|e| {
+            if e.full_path.is_dir() {
+                println!("dirski");
+                e.add_to_listbox(listbox);
+                storage.borrow_mut().push(e)
+            } else {
+                println!("not");
+                //
+            }
+        });
+
+        //let files1 = storage.borrow().to_owned();
+        //files1.into_iter().for_each(|f| f.add_to_listbox(listbox));
     }
 }
