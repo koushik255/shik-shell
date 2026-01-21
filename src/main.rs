@@ -6,11 +6,11 @@ use std::rc::Rc;
 
 use clap::Parser;
 use gtk4::gdk::Key;
+use gtk4::{gdk, glib, prelude::*, ListBox};
 use gtk4::{
     Application, ApplicationWindow, Box, CssProvider, EventControllerKey, Label, Orientation,
-    Picture, ScrolledWindow,
+    Picture, ScrolledWindow, SearchEntry,
 };
-use gtk4::{ListBox, gdk, glib, prelude::*};
 use gtk4_layer_shell::{Layer, LayerShell};
 use rayon::prelude::*;
 
@@ -172,6 +172,7 @@ fn build_ui(app: &Application, path: &str) {
     let display_pic = Picture::new();
     display_pic.add_css_class("preview-image");
     right_pane.append(&display_pic);
+
     // empty state holder
     // how to init as nothing?
     //let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(None.unwrap()));
@@ -192,8 +193,24 @@ fn build_ui(app: &Application, path: &str) {
     }
 
     let job_dude = files.clone();
+    let all_files: Rc<RefCell<Vec<FilePlus>>> = Rc::new(RefCell::new(job_dude.clone()));
     let s_files: SharedVec<FilePlus> = Rc::new(RefCell::new(job_dude));
     let path_control = Rc::new(RefCell::new(PathBuf::new()));
+    let dirs_only: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+
+    let search_entry = SearchEntry::new();
+    search_entry.set_placeholder_text(Some("Search files..."));
+    search_entry.set_margin_bottom(8);
+
+    let all_files_search = all_files.clone();
+    let s_files_search = s_files.clone();
+    let listbox_search = listbox.clone();
+    search_entry.connect_search_changed(move |entry| {
+        let search_text = entry.text().to_string();
+        let files = all_files_search.borrow().to_owned();
+        files.update_screen_with_search(&search_text, &listbox_search, s_files_search.clone());
+    });
+
     // job_dude
     //     .into_iter()
     //     .for_each(|e| s_files.borrow_mut().push(e));
@@ -210,9 +227,25 @@ fn build_ui(app: &Application, path: &str) {
     let window2 = window.clone();
     let listbox_remove = listbox.clone();
     let s_files_remove_all = s_files.clone();
+    let all_files_remove = all_files.clone();
     let glob_path_cl = path_control.clone();
+    let search_entry_key = search_entry.clone();
+    let dirs_only_key = dirs_only.clone();
     key_ctl.connect_key_pressed(move |_, key, _code, _modifier| {
+        if key == Key::t || key == Key::T {
+            if search_entry_key.has_focus() {
+                listbox_remove.grab_focus();
+            } else {
+                search_entry_key.grab_focus();
+            }
+            return glib::Propagation::Stop;
+        }
         if key == Key::Escape {
+            if search_entry_key.has_focus() {
+                search_entry_key.set_text("");
+                listbox_remove.grab_focus();
+                return glib::Propagation::Stop;
+            }
             window2.clone().close();
             return glib::Propagation::Stop;
         }
@@ -241,6 +274,7 @@ fn build_ui(app: &Application, path: &str) {
                 current_dir = std::env::current_dir().unwrap();
             }
             let replace_file = list_self_dir(current_dir.to_str().unwrap());
+            *all_files_remove.borrow_mut() = replace_file.clone();
             println!("Using trait");
             replace_file.append_to_screen(&listbox_remove, s_files_remove_all.clone());
         }
@@ -257,12 +291,55 @@ fn build_ui(app: &Application, path: &str) {
             );
         }
         if key == Key::R {
-            println!("only dirs will be shown");
+            let new_state = !*dirs_only_key.borrow();
+            *dirs_only_key.borrow_mut() = new_state;
+
+            println!("Directory-only mode: {}", new_state);
+
             s_files_remove_all.borrow_mut().clear();
             listbox_remove.remove_all();
-            let replace_file = list_self_dir(glob_path_cl.clone().borrow().to_str().unwrap());
-            // i would only want src to be appnede but lets see
-            replace_file.append_to_screen_selective(&listbox_remove, s_files_remove_all.clone());
+
+            let current_path = if glob_path_cl.clone().borrow().exists() {
+                glob_path_cl.clone().borrow().to_path_buf()
+            } else {
+                std::env::current_dir().unwrap()
+            };
+
+            let replace_file = list_self_dir(current_path.to_str().unwrap());
+            *all_files_remove.borrow_mut() = replace_file.clone();
+
+            if new_state {
+                replace_file
+                    .append_to_screen_selective(&listbox_remove, s_files_remove_all.clone());
+            } else {
+                replace_file.append_to_screen(&listbox_remove, s_files_remove_all.clone());
+            }
+        }
+        if key == Key::j || key == Key::J {
+            if !search_entry_key.has_focus() {
+                if let Some(current_row) = listbox_remove.selected_row() {
+                    let next_index = current_row.index() + 1;
+                    if let Some(next_row) = listbox_remove.row_at_index(next_index) {
+                        listbox_remove.select_row(Some(&next_row));
+                    }
+                } else if let Some(first_row) = listbox_remove.row_at_index(0) {
+                    listbox_remove.select_row(Some(&first_row));
+                }
+            }
+            return glib::Propagation::Stop;
+        }
+        if key == Key::k || key == Key::K {
+            if !search_entry_key.has_focus() {
+                if let Some(current_row) = listbox_remove.selected_row() {
+                    let prev_index = current_row.index() - 1;
+                    if prev_index >= 0 {
+                        if let Some(prev_row) = listbox_remove.row_at_index(prev_index) {
+                            listbox_remove.select_row(Some(&prev_row));
+                        }
+                    }
+                }
+            }
+            return glib::Propagation::Stop;
         }
         glib::Propagation::Proceed
     });
@@ -294,7 +371,9 @@ fn build_ui(app: &Application, path: &str) {
     });
     let remove_singular_row = listbox.clone();
     let s_files_remove = s_files.clone();
+    let all_files_activated = all_files.clone();
     let path_univ = path_control.clone();
+    let dirs_only_activated = dirs_only.clone();
     // clones are like this because of the gtkshell thing not because of Rust language semantics
     listbox.connect_row_activated(move |_, row| {
         eprintln!("DEBUG: Row activated at index {}", row.index());
@@ -335,10 +414,17 @@ fn build_ui(app: &Application, path: &str) {
             file_path_dir_true
         );
         let replace_file = list_self_dir(file_path_dir_true);
-        replace_file.append_to_screen(&remove_singular_row, s_files_remove.clone());
+        *all_files_activated.borrow_mut() = replace_file.clone();
+        if *dirs_only_activated.borrow() {
+            replace_file.append_to_screen_selective(&remove_singular_row, s_files_remove.clone());
+        } else {
+            replace_file.append_to_screen(&remove_singular_row, s_files_remove.clone());
+        }
     });
 
     scrolled.set_child(Some(&listbox));
+
+    let vbox = Box::new(Orientation::Vertical, 8);
 
     let hbox = Box::new(Orientation::Horizontal, 12);
     hbox.set_hexpand(true);
@@ -359,9 +445,12 @@ fn build_ui(app: &Application, path: &str) {
     hbox.append(&scrolled);
     hbox.append(&right_pane);
 
-    window.set_child(Some(&hbox));
+    vbox.append(&search_entry);
+    vbox.append(&hbox);
+    window.set_child(Some(&vbox));
 
     window.present();
+    search_entry.grab_focus();
 }
 
 fn give_me_uis_diddy(path: &str) -> String {
@@ -575,6 +664,12 @@ impl FilePlus {
 trait FilePlusVecExt {
     fn append_to_screen(&self, listbox: &ListBox, storage: SharedVec<FilePlus>);
     fn append_to_screen_selective(&self, listbox: &ListBox, storage: SharedVec<FilePlus>);
+    fn update_screen_with_search(
+        &self,
+        search_term: &str,
+        listbox: &ListBox,
+        storage: SharedVec<FilePlus>,
+    );
 }
 
 impl FilePlusVecExt for Vec<FilePlus> {
@@ -605,5 +700,34 @@ impl FilePlusVecExt for Vec<FilePlus> {
 
         //let files1 = storage.borrow().to_owned();
         //files1.into_iter().for_each(|f| f.add_to_listbox(listbox));
+    }
+
+    fn update_screen_with_search(
+        &self,
+        search_term: &str,
+        listbox: &ListBox,
+        storage: SharedVec<FilePlus>,
+    ) {
+        listbox.remove_all();
+        storage.borrow_mut().clear();
+
+        let search_lower = search_term.to_lowercase();
+
+        self.iter().for_each(|file| {
+            let filename = file
+                .full_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
+            if search_term.is_empty()
+                || filename.contains(&search_lower)
+                || file.extenstion.to_lowercase().contains(&search_lower)
+            {
+                storage.borrow_mut().push(file.clone());
+                file.add_to_listbox(listbox);
+            }
+        });
     }
 }

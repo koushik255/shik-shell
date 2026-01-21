@@ -8,6 +8,9 @@ I want the pictures to be better quality because they are so dusty, i wonder how
 --##DONEi want it to indicate where its a dir or not
 --i want it so that you can turn on like showing the dircs /showing the files, i should proabbly
 recreate the way things are shows on the screen, the struct would need to hold file properties aswell 
+-- that needs to be a toggle and it doesnt work for the first thing, also i should have an Enum which would decide
+what to show, then that enum could decide on what to display,
+-- also i need to add a search but the num should come first IMO
 
 
 wq
